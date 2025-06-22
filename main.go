@@ -16,7 +16,9 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/inconshreveable/go-update"
 	"github.com/rizinorg/rz-pm/pkg"
-	"github.com/rizinorg/rz-pm/pkg/updatecheck"
+	"github.com/rizinorg/rz-pm/site"
+	"github.com/rizinorg/rz-pm/updatecheck"
+	"github.com/rizinorg/rz-pm/utils"
 	"github.com/urfave/cli/v2"
 )
 
@@ -55,7 +57,7 @@ func listPackages(c *cli.Context, installed bool) error {
 		return fmt.Errorf("wrong usage of list command")
 	}
 
-	site, err := pkg.InitSite(pkg.SiteDir(), c.Bool(flagUpdateDB))
+	site, err := site.InitSite(site.SiteDir(), c.Bool(flagUpdateDB))
 	if err != nil {
 		return err
 	}
@@ -81,7 +83,7 @@ func listPackages(c *cli.Context, installed bool) error {
 
 			installedPackage, err := site.GetInstalledPackage(myPkg.Name())
 			if err == nil && installedPackage.RizinVersion != nil {
-				if pkg.GetMajorMinorVersion(site.RizinVersion()) != *installedPackage.RizinVersion {
+				if utils.GetMajorMinorVersion(site.RizinVersion()) != *installedPackage.RizinVersion {
 					info += red(fmt.Sprintf(" [for rizin v%s]", *installedPackage.RizinVersion))
 				}
 			}
@@ -107,7 +109,7 @@ func infoPackage(c *cli.Context) error {
 		return fmt.Errorf("wrong usage of info command")
 	}
 
-	site, err := pkg.InitSite(pkg.SiteDir(), c.Bool(flagUpdateDB))
+	site, err := site.InitSite(site.SiteDir(), c.Bool(flagUpdateDB))
 	if err != nil {
 		return err
 	}
@@ -232,7 +234,7 @@ func installPackages(c *cli.Context) error {
 			cli.ShowCommandHelp(c, "install")
 			return fmt.Errorf("wrong usage of install command")
 		}
-		site, err := pkg.InitSite(pkg.SiteDir(), c.Bool(flagUpdateDB))
+		site, err := site.InitSite(site.SiteDir(), c.Bool(flagUpdateDB))
 		if err != nil {
 			return err
 		}
@@ -271,7 +273,7 @@ func uninstallPackages(c *cli.Context) error {
 			return fmt.Errorf("wrong usage of uninstall command")
 		}
 
-		site, err := pkg.InitSite(pkg.SiteDir(), c.Bool(flagUpdateDB))
+		site, err := site.InitSite(site.SiteDir(), c.Bool(flagUpdateDB))
 		if err != nil {
 			return err
 		}
@@ -302,7 +304,7 @@ func cleanPackage(c *cli.Context) error {
 		return fmt.Errorf("wrong usage of clean command")
 	}
 
-	site, err := pkg.InitSite(pkg.SiteDir(), c.Bool(flagUpdateDB))
+	site, err := site.InitSite(site.SiteDir(), c.Bool(flagUpdateDB))
 	if err != nil {
 		return err
 	}
@@ -390,7 +392,7 @@ func main() {
 	cli.AppHelpTemplate = fmt.Sprintf(`%s
 RZ_PM_SITE:
    %s
-`, cli.AppHelpTemplate, pkg.SiteDir())
+`, cli.AppHelpTemplate, site.SiteDir())
 
 	app.Flags = []cli.Flag{
 		&cli.BoolFlag{

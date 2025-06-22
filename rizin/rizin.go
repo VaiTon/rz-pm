@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/rizinorg/rz-pm/pkg/envparse"
+	"github.com/rizinorg/rz-pm/envparse"
 )
 
 type RizinInfo struct {

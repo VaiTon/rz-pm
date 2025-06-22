@@ -1,7 +1,6 @@
-package pkg
+package db
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -12,14 +11,24 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/storer"
-	"gopkg.in/yaml.v2"
+	"github.com/rizinorg/rz-pm/pkg"
 )
+
+var RZPM_DB_REPO_URL string
+
+func init() {
+	dbURL := os.Getenv("RZPM_DB_REPO_URL")
+	if dbURL != "" {
+		log.Printf("Using custom rz-pm-db Git repo: %s\n", dbURL)
+		RZPM_DB_REPO_URL = dbURL
+	} else {
+		RZPM_DB_REPO_URL = "https://github.com/rizinorg/rz-pm-db"
+	}
+}
 
 type Database struct {
 	Path string
 }
-
-var ErrRizinPackageWrongHash = errors.New("wrong hash")
 
 const dbPath string = "db"
 
@@ -162,42 +171,14 @@ func (d Database) UpdateDatabase(rizinVersion string) error {
 	return nil
 }
 
-func ParsePackageFile(path string) (Package, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return RizinPackage{}, err
-	}
-
-	var p RizinPackage
-	err = yaml.Unmarshal(content, &p)
-	if err != nil {
-		return RizinPackage{}, err
-	}
-
-	if p.PackageName == "" || p.PackageVersion == "" || p.PackageSummary == "" {
-		return RizinPackage{}, fmt.Errorf("wrong file plugin format: name, version, and summary are mandatory")
-	}
-	if p.PackageSource != nil {
-		if p.PackageSource.URL == "" || p.PackageSource.BuildSystem == "" {
-			return RizinPackage{}, fmt.Errorf("wrong file plugin format: Source URL and Build System are mandatory")
-		}
-		if !p.isGitRepo() && p.PackageSource.Hash == "" {
-			return RizinPackage{}, fmt.Errorf("wrong file plugin format: Source Hash is mandatory for non-git plugins")
-		} else if p.isGitRepo() && p.PackageSource.Hash != "" {
-			return RizinPackage{}, fmt.Errorf("wrong file plugin format: Source Hash should not be used for git plugins")
-		}
-	}
-	return p, nil
-}
-
-func (d Database) ListAvailablePackages() ([]Package, error) {
+func (d Database) ListAvailablePackages() ([]pkg.Package, error) {
 	dbPath := filepath.Join(d.Path, dbPath)
 	files, err := os.ReadDir(dbPath)
 	if err != nil {
 		return nil, err
 	}
 
-	packages := []Package{}
+	packages := []pkg.Package{}
 	for _, file := range files {
 		// skip directories
 		if file.IsDir() {
@@ -206,7 +187,7 @@ func (d Database) ListAvailablePackages() ([]Package, error) {
 
 		name := filepath.Join(dbPath, file.Name())
 
-		p, err := ParsePackageFile(name)
+		p, err := pkg.ParsePackageFile(name)
 		if err != nil {
 			fmt.Printf("Warning: could not read %s: %v\n", name, err)
 			continue
@@ -218,10 +199,10 @@ func (d Database) ListAvailablePackages() ([]Package, error) {
 	return packages, nil
 }
 
-func (d Database) GetPackage(name string) (Package, error) {
+func (d Database) GetPackage(name string) (pkg.Package, error) {
 	packages, err := d.ListAvailablePackages()
 	if err != nil {
-		return RizinPackage{}, err
+		return pkg.RizinPackage{}, err
 	}
 
 	for _, pkg := range packages {
@@ -230,5 +211,5 @@ func (d Database) GetPackage(name string) (Package, error) {
 		}
 	}
 
-	return RizinPackage{}, fmt.Errorf("package '%s' not found", name)
+	return pkg.RizinPackage{}, fmt.Errorf("package '%s' not found", name)
 }

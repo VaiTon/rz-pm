@@ -1,91 +1,32 @@
-package pkg
+package site
 
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
-	"sync"
 
-	"github.com/adrg/xdg"
-	"github.com/rizinorg/rz-pm/pkg/rizin"
+	"github.com/rizinorg/rz-pm/db"
+	"github.com/rizinorg/rz-pm/pkg"
+	"github.com/rizinorg/rz-pm/rizin"
+	"github.com/rizinorg/rz-pm/utils"
 )
-
-const (
-	SiteDirEnvVar = "RZPM_SITEDIR"
-)
-
-var ErrSiteLocked = fmt.Errorf("site directory is already locked")
-
-func SiteDir() string {
-	if envVar := os.Getenv(SiteDirEnvVar); envVar != "" {
-		return envVar
-	}
-
-	return filepath.Join(xdg.DataHome, "rz-pm", "site")
-}
-
-var RZPM_DB_REPO_URL string
-
-func init() {
-	dbURL := os.Getenv("RZPM_DB_REPO_URL")
-	if dbURL != "" {
-		log.Printf("Using custom rz-pm-db Git repo: %s\n", dbURL)
-		RZPM_DB_REPO_URL = dbURL
-	} else {
-		RZPM_DB_REPO_URL = "https://github.com/rizinorg/rz-pm-db"
-	}
-}
-
-type Site interface {
-	io.Closer
-	ListAvailablePackages() ([]Package, error)
-	ListInstalledPackages() ([]Package, error)
-	IsPackageInstalled(pkg Package) bool
-	GetPackage(name string) (Package, error)
-	GetPackageFromFile(filename string) (Package, error)
-	GetInstalledPackage(name string) (InstalledPackage, error)
-	GetBaseDir() string
-	GetArtifactsDir() string
-	GetPkgConfigDir() string
-	GetCMakeDir() string
-	InstallPackage(pkg Package) error
-	UninstallPackage(pkg Package) error
-	CleanPackage(pkg Package) error
-	Remove() error
-	RizinVersion() string
-}
-
-type InstalledPackage struct {
-	InstalledName  string    `json:"name"`
-	InstalledFiles *[]string `json:"files"`
-	RizinVersion   *string   `json:"rizin_version"`
-}
-
-type SiteLock struct {
-	sync.Locker
-	path   string
-	locked bool
-	mu     sync.Mutex
-}
-
-type RizinSite struct {
-	Path              string
-	Database          Database
-	PkgConfigPath     string
-	CMakePath         string
-	installedPackages []InstalledPackage
-
-	rzInfo rizin.RizinInfo
-	lock   *SiteLock
-}
 
 const dbDir string = "rz-pm-db"
 const artifactsDir string = "artifacts"
 const installedFile string = "installed"
+
+type RizinSite struct {
+	Path              string
+	Database          db.Database
+	PkgConfigPath     string
+	CMakePath         string
+	installedPackages []pkg.InstalledPackage
+
+	rzInfo rizin.RizinInfo
+	lock   *SiteLock
+}
 
 func InitSite(path string, updateDB bool) (Site, error) {
 	// create the filesystem structure
@@ -132,7 +73,7 @@ func InitSite(path string, updateDB bool) (Site, error) {
 		return cleanup(fmt.Errorf("failed to get installed packages: %w", err))
 	}
 
-	d, err := InitDatabase(dbSubdir, rizinInfo.Version)
+	d, err := db.InitDatabase(dbSubdir, rizinInfo.Version)
 	if err != nil {
 		return cleanup(fmt.Errorf("failed to initialize database: %w", err))
 	}
@@ -167,26 +108,10 @@ func InitSite(path string, updateDB bool) (Site, error) {
 	return &s, nil
 }
 
-func (rp InstalledPackage) Name() string {
-	return rp.InstalledName
-}
-func (rp InstalledPackage) Version() string            { return "" }
-func (rp InstalledPackage) Description() string        { return "" }
-func (rp InstalledPackage) Summary() string            { return "" }
-func (rp InstalledPackage) Source() RizinPackageSource { return RizinPackageSource{} }
-func (rp InstalledPackage) Download(baseArtifactsPath string) error {
-	return fmt.Errorf("cannot be called")
-}
-func (rp InstalledPackage) Build(site Site) error { return fmt.Errorf("cannot be called") }
-func (rp InstalledPackage) Install(site Site) ([]string, error) {
-	return nil, fmt.Errorf("cannot be called")
-}
-func (rp InstalledPackage) Uninstall(site Site) error { return fmt.Errorf("cannot be called") }
-
-func (s *RizinSite) ListAvailablePackages() ([]Package, error) {
+func (s *RizinSite) ListAvailablePackages() ([]pkg.Package, error) {
 	res, err := s.Database.ListAvailablePackages()
 	if err != nil {
-		return []Package{}, err
+		return []pkg.Package{}, err
 	}
 
 	for i := range s.installedPackages {
@@ -199,8 +124,8 @@ func (s *RizinSite) ListAvailablePackages() ([]Package, error) {
 	return res, nil
 }
 
-func (s *RizinSite) ListInstalledPackages() ([]Package, error) {
-	installedPackages := make([]Package, len(s.installedPackages))
+func (s *RizinSite) ListInstalledPackages() ([]pkg.Package, error) {
+	installedPackages := make([]pkg.Package, len(s.installedPackages))
 	for i := range s.installedPackages {
 		pkg, err := s.Database.GetPackage(s.installedPackages[i].InstalledName)
 		if err != nil {
@@ -216,18 +141,18 @@ func (s *RizinSite) RizinVersion() string {
 	return s.rzInfo.Version
 }
 
-func (s *RizinSite) IsPackageInstalled(pkg Package) bool {
+func (s *RizinSite) IsPackageInstalled(pkg pkg.Package) bool {
 	name := pkg.Name()
 	_, err := s.GetInstalledPackage(name)
 	return err == nil
 }
 
-func (s *RizinSite) GetPackage(name string) (Package, error) {
+func (s *RizinSite) GetPackage(name string) (pkg.Package, error) {
 	return s.Database.GetPackage(name)
 }
 
-func (s *RizinSite) GetPackageFromFile(filename string) (Package, error) {
-	return ParsePackageFile(filename)
+func (s *RizinSite) GetPackageFromFile(filename string) (pkg.Package, error) {
+	return pkg.ParsePackageFile(filename)
 }
 
 func (s *RizinSite) GetBaseDir() string {
@@ -246,27 +171,27 @@ func (s *RizinSite) GetCMakeDir() string {
 	return s.CMakePath
 }
 
-func (s *RizinSite) InstallPackage(pkg Package) error {
-	if s.IsPackageInstalled(pkg) {
-		return fmt.Errorf("package %s already installed", pkg.Name())
+func (s *RizinSite) InstallPackage(p pkg.Package) error {
+	if s.IsPackageInstalled(p) {
+		return fmt.Errorf("package %s already installed", p.Name())
 	}
 
-	files, err := pkg.Install(s)
+	files, err := p.Install(s.buildConfig())
 	if err != nil {
 		return err
 	}
 
-	minorVersion := GetMajorMinorVersion(s.RizinVersion())
-	s.installedPackages = append(s.installedPackages, InstalledPackage{
-		pkg.Name(),
-		&files,
-		&minorVersion,
+	minorVersion := utils.GetMajorMinorVersion(s.RizinVersion())
+	s.installedPackages = append(s.installedPackages, pkg.InstalledPackage{
+		InstalledName:  p.Name(),
+		InstalledFiles: &files,
+		RizinVersion:   &minorVersion,
 	})
 	installedFilePath := filepath.Join(s.Path, installedFile)
 	return updateInstalledPackages(installedFilePath, s.installedPackages)
 }
 
-func (s *RizinSite) UninstallPackage(pkg Package) error {
+func (s *RizinSite) UninstallPackage(pkg pkg.Package) error {
 	if !s.IsPackageInstalled(pkg) {
 		return fmt.Errorf("package %s not installed", pkg.Name())
 	}
@@ -278,7 +203,7 @@ func (s *RizinSite) UninstallPackage(pkg Package) error {
 
 	if installedPackage.InstalledFiles == nil {
 		// NOTE: kept for compatibility with v0.1.9
-		err = pkg.Uninstall(s)
+		err = pkg.Uninstall(s.buildConfig())
 		if err != nil {
 			return err
 		}
@@ -297,7 +222,7 @@ func (s *RizinSite) UninstallPackage(pkg Package) error {
 	return updateInstalledPackages(installedFilePath, s.installedPackages)
 }
 
-func (s *RizinSite) CleanPackage(pkg Package) error {
+func (s *RizinSite) CleanPackage(pkg pkg.Package) error {
 	pkgArtifactsPath := filepath.Join(s.GetArtifactsDir(), pkg.Name(), pkg.Version())
 	_, err := os.Stat(pkgArtifactsPath)
 	if err != nil {
@@ -329,6 +254,14 @@ func (s *RizinSite) Close() error {
 	return nil
 }
 
+func (s *RizinSite) buildConfig() pkg.BuildConfig {
+	return pkg.BuildConfig{
+		ArtifactsDir: s.GetArtifactsDir(),
+		PkgConfigDir: s.GetPkgConfigDir(),
+		CMakeDir:     s.GetCMakeDir(),
+	}
+}
+
 func getPkgConfigPath(info *rizin.RizinInfo) (string, error) {
 	libPath := info.LibDir
 
@@ -355,35 +288,39 @@ func getCMakePath(info *rizin.RizinInfo) (string, error) {
 	return cmakePath, nil
 }
 
-func getInstalledPackages(path string, rizinVersion string) ([]InstalledPackage, error) {
+func getInstalledPackages(path string, rizinVersion string) ([]pkg.InstalledPackage, error) {
 	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		return []InstalledPackage{}, nil
+		return []pkg.InstalledPackage{}, nil
 	}
 
 	by, err := os.ReadFile(path)
 	if err != nil {
-		return []InstalledPackage{}, err
+		return []pkg.InstalledPackage{}, err
 	}
 
-	var v []InstalledPackage
+	var v []pkg.InstalledPackage
 	err = json.Unmarshal(by, &v)
 	if err != nil {
 		var vs []string
 		err = json.Unmarshal(by, &vs)
 		if err != nil {
-			return []InstalledPackage{}, err
+			return []pkg.InstalledPackage{}, err
 		}
 
-		v = []InstalledPackage{}
+		v = []pkg.InstalledPackage{}
 		for _, s := range vs {
 			if s != "" {
-				v = append(v, InstalledPackage{InstalledName: s, InstalledFiles: nil, RizinVersion: nil})
+				v = append(v, pkg.InstalledPackage{
+					InstalledName:  s,
+					InstalledFiles: nil,
+					RizinVersion:   nil,
+				})
 			}
 		}
 	}
 
-	version := GetMajorMinorVersion(rizinVersion)
+	version := utils.GetMajorMinorVersion(rizinVersion)
 	for i := range v {
 		if v[i].RizinVersion == nil {
 			v[i].RizinVersion = &version
@@ -393,7 +330,7 @@ func getInstalledPackages(path string, rizinVersion string) ([]InstalledPackage,
 	return v, nil
 }
 
-func updateInstalledPackages(path string, packages []InstalledPackage) error {
+func updateInstalledPackages(path string, packages []pkg.InstalledPackage) error {
 	by, err := json.Marshal(packages)
 	if err != nil {
 		return err
@@ -405,10 +342,10 @@ func updateInstalledPackages(path string, packages []InstalledPackage) error {
 	return err
 }
 
-func removePackageFromSlice(sl []InstalledPackage, name string) []InstalledPackage {
+func removePackageFromSlice(sl []pkg.InstalledPackage, name string) []pkg.InstalledPackage {
 	for i := range sl {
 		if sl[i].InstalledName == name {
-			ret := make([]InstalledPackage, 0)
+			ret := make([]pkg.InstalledPackage, 0)
 			if i > 0 {
 				ret = append(ret, sl[:i]...)
 			}
@@ -421,62 +358,11 @@ func removePackageFromSlice(sl []InstalledPackage, name string) []InstalledPacka
 	return sl
 }
 
-func (s *RizinSite) GetInstalledPackage(name string) (InstalledPackage, error) {
+func (s *RizinSite) GetInstalledPackage(name string) (pkg.InstalledPackage, error) {
 	for _, v := range s.installedPackages {
 		if v.InstalledName == name {
 			return v, nil
 		}
 	}
-	return InstalledPackage{}, fmt.Errorf("installed package %s not found", name)
-}
-
-func newSiteLock(path string) *SiteLock {
-	return &SiteLock{
-		mu:     sync.Mutex{},
-		locked: false,
-		path:   filepath.Join(path, "site.lock"),
-	}
-}
-
-func (sl *SiteLock) Lock() error {
-	// take complete ownership of the struct
-	sl.mu.Lock()
-	defer sl.mu.Unlock()
-
-	lockFile, err := os.OpenFile(sl.path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-	if err != nil {
-		if os.IsExist(err) {
-			return ErrSiteLocked
-		}
-		return fmt.Errorf("could not create lock file %s: %w", sl.path, err)
-	}
-
-	err = lockFile.Close()
-	if err != nil {
-		return fmt.Errorf("could not close lock file %s: %w", sl.path, err)
-	}
-
-	sl.locked = true
-	return nil
-}
-
-func (sl *SiteLock) Unlock() error {
-	sl.mu.Lock()
-	defer sl.mu.Unlock()
-
-	if !sl.locked {
-		return fmt.Errorf("site lock is not active")
-	}
-
-	err := os.Remove(sl.path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			sl.locked = false
-			return nil // lock file already removed
-		}
-		return fmt.Errorf("could not remove lock file %s: %w", sl.path, err)
-	}
-
-	sl.locked = false
-	return nil
+	return pkg.InstalledPackage{}, fmt.Errorf("installed package %s not found", name)
 }

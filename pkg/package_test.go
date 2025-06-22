@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -71,29 +70,6 @@ func TestWrongHash(t *testing.T) {
 	err = p.Download(tmpPath)
 	assert.ErrorIs(t, err, ErrRizinPackageWrongHash, "wrong hash should be detected")
 }
-
-type FakeSite struct {
-	ArtifactsDir string
-}
-
-func (s FakeSite) GetInstalledPackage(string) (InstalledPackage, error) {
-	return InstalledPackage{}, nil
-}
-func (s FakeSite) ListAvailablePackages() ([]Package, error)           { return []Package{}, nil }
-func (s FakeSite) ListInstalledPackages() ([]Package, error)           { return []Package{}, nil }
-func (s FakeSite) IsPackageInstalled(Package) bool                     { return false }
-func (s FakeSite) GetPackage(string) (Package, error)                  { return RizinPackage{}, nil }
-func (s FakeSite) GetPackageFromFile(filename string) (Package, error) { return RizinPackage{}, nil }
-func (s FakeSite) GetBaseDir() string                                  { return "" }
-func (s FakeSite) RizinVersion() string                                { return "0.5.2" }
-func (s FakeSite) GetArtifactsDir() string                             { return s.ArtifactsDir }
-func (s FakeSite) GetPkgConfigDir() string                             { return "pkg-config-dir" }
-func (s FakeSite) GetCMakeDir() string                                 { return "" }
-func (s FakeSite) InstallPackage(Package) error                        { return nil }
-func (s FakeSite) UninstallPackage(Package) error                      { return nil }
-func (s FakeSite) CleanPackage(Package) error                          { return nil }
-func (s FakeSite) Remove() error                                       { return nil }
-func (s FakeSite) Close() error                                        { return nil }
 
 // tarGzDir creates a .tar.gz archive at destFile containing the contents of srcDir.
 func tarGzDir(destFile, srcDir string) error {
@@ -239,7 +215,7 @@ func TestInstallSimplePackage(t *testing.T) {
 	err = p.Download(tmpPath)
 	require.NoError(t, err, "package should be downloaded")
 
-	installedFiles, err := p.Install(FakeSite{ArtifactsDir: tmpPath})
+	installedFiles, err := p.Install(BuildConfig{ArtifactsDir: tmpPath})
 	require.NoError(t, err, "The plugin should be built and installed without errors")
 
 	files, err := os.ReadDir(pluginsPath)
@@ -294,14 +270,19 @@ func TestUninstallSimplePackage(t *testing.T) {
 	err = p.Download(tmpPath)
 	require.NoError(t, err, "package should be downloaded")
 
-	s := FakeSite{ArtifactsDir: tmpPath}
-	_, err = p.Install(s)
+	buildConfig := BuildConfig{
+		ArtifactsDir: tmpPath,
+		PkgConfigDir: filepath.Join(pluginsPath, "pkg-config-dir"),
+		CMakeDir:     filepath.Join(pluginsPath, "cmake-dir"),
+	}
+
+	_, err = p.Install(buildConfig)
 	assert.NoError(t, err, "The plugin should be built and installed without errors")
 
-	err = p.Uninstall(s)
+	err = p.Uninstall(buildConfig)
 	assert.NoError(t, err, "The plugin should be uninstalled without errors")
 
-	files, err := ioutil.ReadDir(pluginsPath)
+	files, err := os.ReadDir(pluginsPath)
 	require.NoError(t, err, "pluginsPath should be read")
 	require.Len(t, files, 0, "there should be one plugins installed")
 }
@@ -331,4 +312,83 @@ func TestDownloadGitPackage(t *testing.T) {
 	assert.NoError(t, err, "simple-git(jsdec) master branch should have been git cloned")
 	_, err = os.Stat(filepath.Join(tmpPath, "simple-git", "dev", "jsdec", "c"))
 	assert.NoError(t, err, "simple-git(jsdec)c should be there")
+}
+
+func TestGoodPackageFormat(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "package-format")
+	require.NoError(t, err, "temporary file should be created")
+	defer tmpFile.Close()
+
+	tmpFile.WriteString(`name: simple
+version: 0.0.1
+summary: simple description
+source:
+  url: https://github.com/rizinorg/jsdec
+  hash: 0f966e3c2c649cafa21c4466b783330c2b21baea
+  build_system: meson
+  build_arguments:
+    - -Dstandalone=false
+  directory: jsdec-0.7.0/
+`)
+
+	p, err := ParsePackageFile(tmpFile.Name())
+	require.NoError(t, err, "no errors in parsing the above package file")
+	assert.Equal(t, "simple", p.Name())
+	assert.Equal(t, "0.0.1", p.Version())
+	assert.Equal(t, "simple description", p.Summary())
+	assert.Equal(t, "https://github.com/rizinorg/jsdec", p.Source().URL)
+	assert.Equal(t, "0f966e3c2c649cafa21c4466b783330c2b21baea", p.Source().Hash)
+	assert.Equal(t, Meson, p.Source().BuildSystem)
+	assert.Contains(t, p.Source().BuildArguments, "-Dstandalone=false")
+	assert.Equal(t, "jsdec-0.7.0/", p.Source().Directory)
+}
+
+func TestWrongPackageFormat(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "package-format")
+	require.NoError(t, err, "temporary file should be created")
+	defer tmpFile.Close()
+
+	f1 := `version: 0.0.1
+summary: simple description
+source:
+  url: https://github.com/rizinorg/jsdec/archive/refs/tags/v0.7.0.tar.gz
+  hash: sha256:2b2587dd117d48b284695416a7349a21c4dd30fbe75cc5890ed74945c9b474ea
+  build_system: meson
+  build_arguments:
+    - -Dstandalone=false
+  directory: jsdec-0.7.0/
+`
+
+	f2 := `name: simple
+summary: simple description
+source:
+  url: https://github.com/rizinorg/jsdec/archive/refs/tags/v0.7.0.tar.gz
+  hash: sha256:2b2587dd117d48b284695416a7349a21c4dd30fbe75cc5890ed74945c9b474ea
+  build_system: meson
+  build_arguments:
+    - -Dstandalone=false
+  directory: jsdec-0.7.0/
+`
+
+	f3 := `name: simple
+version: 0.0.1
+summary: simple description
+`
+
+	tmpFile.WriteString(f1)
+
+	_, err = ParsePackageFile(tmpFile.Name())
+	assert.Error(t, err, "missing name should fail parsing")
+
+	tmpFile.Truncate(0)
+	tmpFile.WriteString(f2)
+
+	_, err = ParsePackageFile(tmpFile.Name())
+	assert.Error(t, err, "missing version should fail parsing")
+
+	tmpFile.Truncate(0)
+	tmpFile.WriteString(f3)
+
+	_, err = ParsePackageFile(tmpFile.Name())
+	assert.Error(t, err, "missing source should fail parsing")
 }

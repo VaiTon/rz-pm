@@ -1,4 +1,4 @@
-package pkg
+package site
 
 import (
 	"errors"
@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/rizinorg/rz-pm/pkg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func containsPackage(packages []Package, name string) bool {
+func containsPackage(packages []pkg.Package, name string) bool {
 	for _, rp := range packages {
 		if rp.Name() == name {
 			return true
@@ -97,99 +98,31 @@ source:
   directory: jsdec-0.7.0/
 `)
 
-	pkg, err := ParsePackageFile(tmpFile.Name())
+	p, err := pkg.ParsePackageFile(tmpFile.Name())
 	require.NoError(t, err, "no errors in parsing the above package file")
-	assert.Equal(t, "simple", pkg.Name())
-	assert.Equal(t, "0.0.1", pkg.Version())
-	assert.Equal(t, "simple description", pkg.Summary())
-	assert.Equal(t, "https://github.com/rizinorg/jsdec", pkg.Source().URL)
-	assert.Equal(t, "0f966e3c2c649cafa21c4466b783330c2b21baea", pkg.Source().Hash)
-	assert.Equal(t, Meson, pkg.Source().BuildSystem)
-	assert.Contains(t, pkg.Source().BuildArguments, "-Dstandalone=false")
-	assert.Equal(t, "jsdec-0.7.0/", pkg.Source().Directory)
-}
-
-func TestWrongPackageFormat(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "package-format")
-	require.NoError(t, err, "temporary file should be created")
-	defer tmpFile.Close()
-
-	f1 := `version: 0.0.1
-summary: simple description
-source:
-  url: https://github.com/rizinorg/jsdec/archive/refs/tags/v0.7.0.tar.gz
-  hash: sha256:2b2587dd117d48b284695416a7349a21c4dd30fbe75cc5890ed74945c9b474ea
-  build_system: meson
-  build_arguments:
-    - -Dstandalone=false
-  directory: jsdec-0.7.0/
-`
-
-	f2 := `name: simple
-summary: simple description
-source:
-  url: https://github.com/rizinorg/jsdec/archive/refs/tags/v0.7.0.tar.gz
-  hash: sha256:2b2587dd117d48b284695416a7349a21c4dd30fbe75cc5890ed74945c9b474ea
-  build_system: meson
-  build_arguments:
-    - -Dstandalone=false
-  directory: jsdec-0.7.0/
-`
-
-	f3 := `name: simple
-version: 0.0.1
-summary: simple description
-`
-
-	tmpFile.WriteString(f1)
-
-	_, err = ParsePackageFile(tmpFile.Name())
-	assert.Error(t, err, "missing name should fail parsing")
-
-	tmpFile.Truncate(0)
-	tmpFile.WriteString(f2)
-
-	_, err = ParsePackageFile(tmpFile.Name())
-	assert.Error(t, err, "missing version should fail parsing")
-
-	tmpFile.Truncate(0)
-	tmpFile.WriteString(f3)
-
-	_, err = ParsePackageFile(tmpFile.Name())
-	assert.Error(t, err, "missing source should fail parsing")
+	assert.Equal(t, "simple", p.Name())
+	assert.Equal(t, "0.0.1", p.Version())
+	assert.Equal(t, "simple description", p.Summary())
+	assert.Equal(t, "https://github.com/rizinorg/jsdec", p.Source().URL)
+	assert.Equal(t, "0f966e3c2c649cafa21c4466b783330c2b21baea", p.Source().Hash)
+	assert.Equal(t, pkg.Meson, p.Source().BuildSystem)
+	assert.Contains(t, p.Source().BuildArguments, "-Dstandalone=false")
+	assert.Equal(t, "jsdec-0.7.0/", p.Source().Directory)
 }
 
 type FakePackage struct {
 	myName string
 }
 
-func (fp FakePackage) Name() string {
-	return fp.myName
-}
-func (fp FakePackage) Version() string {
-	return ""
-}
-func (fp FakePackage) Summary() string {
-	return ""
-}
-func (fp FakePackage) Description() string {
-	return ""
-}
-func (fp FakePackage) Source() RizinPackageSource {
-	return RizinPackageSource{}
-}
-func (fp FakePackage) Download(baseArtifactsPath string) error {
-	return nil
-}
-func (fp FakePackage) Build(site Site) error {
-	return nil
-}
-func (fp FakePackage) Install(site Site) ([]string, error) {
-	return nil, nil
-}
-func (fp FakePackage) Uninstall(site Site) error {
-	return nil
-}
+func (fp FakePackage) Name() string                              { return fp.myName }
+func (fp FakePackage) Version() string                           { return "" }
+func (fp FakePackage) Summary() string                           { return "" }
+func (fp FakePackage) Description() string                       { return "" }
+func (fp FakePackage) Source() pkg.RizinPackageSource            { return pkg.RizinPackageSource{} }
+func (fp FakePackage) Download(string) error                     { return nil }
+func (fp FakePackage) Build(pkg.BuildConfig) error               { return nil }
+func (fp FakePackage) Install(pkg.BuildConfig) ([]string, error) { return nil, nil }
+func (fp FakePackage) Uninstall(pkg.BuildConfig) error           { return nil }
 
 func TestListInstalledPackages(t *testing.T) {
 	tmpPath, err := os.MkdirTemp(os.TempDir(), "rzpmtest")
