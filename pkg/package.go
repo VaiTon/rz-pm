@@ -177,35 +177,52 @@ func (rp RizinPackage) downloadTar(artifactsPath string) error {
 	return nil
 }
 
+// downloadGit clones or pulls a git repository to the specified artifacts path
 func (rp RizinPackage) downloadGit(artifactsPath string) error {
 	gitProjectNamePieces := strings.Split(rp.PackageSource.URL, "/")
+
 	gitProjectName := gitProjectNamePieces[len(gitProjectNamePieces)-1]
 	gitProjectName = strings.TrimSuffix(gitProjectName, ".git")
 
 	projectPath := filepath.Join(artifactsPath, gitProjectName)
-	if fi, err := os.Stat(projectPath); !os.IsNotExist(err) && fi.IsDir() {
-		repo, err := git.PlainOpen(projectPath)
-		if err != nil {
-			return fmt.Errorf("failed to open git repository at %s: %w", projectPath, err)
-		}
+	fi, err := os.Stat(projectPath)
 
-		tree, err := repo.Worktree()
-		if err != nil {
-			return fmt.Errorf("failed to get worktree for git repository at %s: %w", projectPath, err)
-		}
-
-		err = tree.Pull(&git.PullOptions{Progress: nil, RecurseSubmodules: git.DefaultSubmoduleRecursionDepth})
-		if err == nil || err == git.NoErrAlreadyUpToDate {
-			return nil
-		}
-		return fmt.Errorf("failed to pull git repository at %s: %w", projectPath, err)
-	} else {
+	// if the directory does not exist, create it
+	if os.IsNotExist(err) {
 		_, err = git.PlainClone(projectPath, false, &git.CloneOptions{
 			URL:               rp.PackageSource.URL,
 			RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 		})
-		return fmt.Errorf("failed to clone git repository from %s: %w", rp.PackageSource.URL, err)
+		if err == nil {
+			return fmt.Errorf("failed to clone git repository from %s: %w", rp.PackageSource.URL, err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to stat project directory %s: %w", projectPath, err)
 	}
+
+	if !fi.IsDir() {
+		return fmt.Errorf("directory %s already exists but is not a directory", projectPath)
+	}
+
+	// if the directory exists, try to pull the latest changes
+	repo, err := git.PlainOpen(projectPath)
+	if err != nil {
+		return fmt.Errorf("failed to open git repository at %s: %w", projectPath, err)
+	}
+
+	tree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree for git repository at %s: %w", projectPath, err)
+	}
+
+	err = tree.Pull(&git.PullOptions{Progress: nil, RecurseSubmodules: git.DefaultSubmoduleRecursionDepth})
+	if err != nil && err != git.NoErrAlreadyUpToDate {
+		return fmt.Errorf("failed to pull git repository at %s: %w", projectPath, err)
+	}
+	
+	log.Printf("Git repository %s updated successfully.", projectPath)
+	return nil
 }
 
 // Download the source code of a package and extract it in the provided path
