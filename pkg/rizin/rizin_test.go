@@ -6,9 +6,24 @@ import (
 	"testing"
 )
 
-// fakeRizinScript returns the contents of a bash script that mimics "rizin -H" output.
-func fakeRizinScript() string {
-	return `#!/bin/bash
+// fakeRizinScript returns the contents of a script that mimics "rizin -H" output.
+// It generates a shell script for Unix and a batch file for Windows.
+func fakeRizinScript(isWindows bool) string {
+	if isWindows {
+		return `@echo off
+if "%1"=="-H" (
+echo RZ_VERSION=9.9.9-fake
+echo RZ_PREFIX=/fake/prefix
+echo RZ_EXTRA_PREFIX=/fake/extra
+echo RZ_MAGICPATH=/fake/magic
+echo RZ_INCDIR=/fake/include
+echo RZ_LIBDIR=/fake/lib
+echo RZ_SIGDB=/fake/sigdb
+echo RZ_EXTRA_SIGDB=/fake/extra_sigdb
+)
+`
+	} else {
+		return `#!/bin/bash
 if [[ "$1" == "-H" ]]; then
 cat <<EOF
 RZ_VERSION=9.9.9-fake
@@ -19,28 +34,27 @@ RZ_INCDIR=/fake/include
 RZ_LIBDIR=/fake/lib
 RZ_SIGDB=/fake/sigdb
 RZ_EXTRA_SIGDB=/fake/extra_sigdb
-RZ_LIBEXT=.so
-RZ_CONFIGHOME=/fake/config
-RZ_DATAHOME=/fake/data
-RZ_CACHEHOME=/fake/cache
-RZ_LIB_PLUGINS=/fake/plugins
-RZ_EXTRA_PLUGINS=/fake/extra_plugins
-RZ_USER_PLUGINS=/fake/user_plugins
-RZ_IS_PORTABLE=0
 EOF
-else
-	echo "Unknown option" >&2
-	exit 1
 fi
 `
+	}
 }
 
 func TestGetRizinInfo_FakeExecutable(t *testing.T) {
 	tmpDir := t.TempDir()
-	fakeRizinPath := filepath.Join(tmpDir, "rizin")
+	isWindows := false
+	exeName := "rizin"
+	scriptMode := os.FileMode(0755)
+	if os.PathSeparator == '\\' {
+		isWindows = true
+		exeName = "rizin.bat"
+		// On Windows, .bat files are executable by default
+		scriptMode = 0666
+	}
+	fakeRizinPath := filepath.Join(tmpDir, exeName)
 
 	// Write the fake rizin script
-	if err := os.WriteFile(fakeRizinPath, []byte(fakeRizinScript()), 0755); err != nil {
+	if err := os.WriteFile(fakeRizinPath, []byte(fakeRizinScript(isWindows)), scriptMode); err != nil {
 		t.Fatalf("failed to write fake rizin: %v", err)
 	}
 
@@ -60,8 +74,14 @@ func TestGetRizinInfo_FakeExecutable(t *testing.T) {
 	if info.Prefix != "/fake/prefix" {
 		t.Errorf("expected Prefix=/fake/prefix, got %q", info.Prefix)
 	}
-	if info.LibExt != ".so" {
-		t.Errorf("expected LibExt=.so, got %q", info.LibExt)
+	if isWindows {
+		if info.LibExt != ".dll" {
+			t.Errorf("expected LibExt=.dll, got %q", info.LibExt)
+		}
+	} else {
+		if info.LibExt != ".so" {
+			t.Errorf("expected LibExt=.so, got %q", info.LibExt)
+		}
 	}
 	if info.IsPortable != "0" {
 		t.Errorf("expected IsPortable=0, got %q", info.IsPortable)
