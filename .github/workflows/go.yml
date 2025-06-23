@@ -7,6 +7,7 @@ on:
 
 env:
   GO_VERSION: "1.24"
+  RIZIN_DIR: "${HOME}/rizin"
   RIZIN_VERSION: "v0.8.1"
   PYTHON_VERSION: "3.13"
   RZ_PM_SITE: "$HOME/.rizin/rz-pm"
@@ -55,22 +56,22 @@ jobs:
         id: cache-rizin-build
         with:
           key: rizin-build-${{ matrix.os }}-${{ env.RIZIN_VERSION }}
-          path: rizin
+          path: ${{ env.RIZIN_DIR }}
 
       - name: Clone Rizin repository and checkout version ${{ env.RIZIN_VERSION }}
         if: steps.cache-rizin-build.outputs.cache-hit != 'true'
         run: |
-          git clone https://github.com/rizinorg/rizin
-          git -C rizin checkout ${{ env.RIZIN_VERSION }}
+          git clone https://github.com/rizinorg/rizin ${{ env.RIZIN_DIR }}
+          git -C ${{ env.RIZIN_DIR }} checkout ${{ env.RIZIN_VERSION }}
 
       - name: Configure and build Rizin
         if: steps.cache-rizin-build.outputs.cache-hit != 'true'
         run: |
-          meson setup --buildtype=release --prefix=${{ matrix.prefix }} ${{ matrix.meson_options }} rizin/build rizin
-          ninja ${{ matrix.os == 'windows-latest' && '-j1' || '' }} -C rizin/build
+          meson setup ${{ matrix.meson_options }} --buildtype=release --prefix=${{ matrix.prefix }} ${{ env.RIZIN_DIR }}/build ${{ env.RIZIN_DIR }}
+          ninja ${{ matrix.os == 'windows-latest' && '-j1' || '' }} -C ${{ env.RIZIN_DIR }}/build
 
       - name: Install rizin
-        run: ${{ matrix.sudo }} ninja -C rizin/build install
+        run: ${{ matrix.sudo }} ninja -C ${{ env.RIZIN_DIR }}/build install
 
       - name: Add rizin dir to PATH
         if: matrix.os == 'windows-latest'
