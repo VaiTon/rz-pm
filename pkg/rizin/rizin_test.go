@@ -20,6 +20,14 @@ echo RZ_INCDIR=/fake/include
 echo RZ_LIBDIR=/fake/lib
 echo RZ_SIGDB=/fake/sigdb
 echo RZ_EXTRA_SIGDB=/fake/extra_sigdb
+echo RZ_LIBEXT=dll
+echo RZ_CONFIGHOME=/fake/config
+echo RZ_DATAHOME=/fake/data
+echo RZ_CACHEHOME=/fake/cache
+echo RZ_LIB_PLUGINS=/fake/lib_plugins
+echo RZ_EXTRA_PLUGINS=/fake/extra_plugins
+echo RZ_USER_PLUGINS=/fake/user_plugins
+echo RZ_IS_PORTABLE=0
 )
 `
 	} else {
@@ -34,6 +42,14 @@ RZ_INCDIR=/fake/include
 RZ_LIBDIR=/fake/lib
 RZ_SIGDB=/fake/sigdb
 RZ_EXTRA_SIGDB=/fake/extra_sigdb
+RZ_LIBEXT=so
+RZ_CONFIGHOME=/fake/config
+RZ_DATAHOME=/fake/data
+RZ_CACHEHOME=/fake/cache
+RZ_LIB_PLUGINS=/fake/lib_plugins
+RZ_EXTRA_PLUGINS=/fake/extra_plugins
+RZ_USER_PLUGINS=/fake/user_plugins
+RZ_IS_PORTABLE=0
 EOF
 fi
 `
@@ -45,6 +61,7 @@ func TestGetRizinInfo_FakeExecutable(t *testing.T) {
 	isWindows := false
 	exeName := "rizin"
 	scriptMode := os.FileMode(0755)
+
 	if os.PathSeparator == '\\' {
 		isWindows = true
 		exeName = "rizin.bat"
@@ -75,11 +92,11 @@ func TestGetRizinInfo_FakeExecutable(t *testing.T) {
 		t.Errorf("expected Prefix=/fake/prefix, got %q", info.Prefix)
 	}
 	if isWindows {
-		if info.LibExt != ".dll" {
-			t.Errorf("expected LibExt=.dll, got %q", info.LibExt)
+		if info.LibExt != "dll" {
+			t.Errorf("expected LibExt=dll, got %q", info.LibExt)
 		}
 	} else {
-		if info.LibExt != ".so" {
+		if info.LibExt != "so" {
 			t.Errorf("expected LibExt=.so, got %q", info.LibExt)
 		}
 	}
