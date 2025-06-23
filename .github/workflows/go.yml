@@ -56,13 +56,11 @@ jobs:
           key: rizin-build-${{ matrix.os }}-${{ env.RIZIN_VERSION }}
           path: rizin
 
-      - name: Clone Rizin repository
+      - name: Clone Rizin repository and checkout version ${{ env.RIZIN_VERSION }}
         if: steps.cache-rizin-build.outputs.cache-hit != 'true'
-        run: git clone https://github.com/rizinorg/rizin
-
-      - name: Checkout rizin version ${{ env.RIZIN_VERSION }}
-        if: steps.cache-rizin-build.outputs.cache-hit != 'true'
-        run: git -C rizin checkout ${{ env.RIZIN_VERSION }}
+        run: |
+          git clone https://github.com/rizinorg/rizin
+          git -C rizin checkout ${{ env.RIZIN_VERSION }}
 
       - name: Configure and build Rizin
         if: steps.cache-rizin-build.outputs.cache-hit != 'true'
