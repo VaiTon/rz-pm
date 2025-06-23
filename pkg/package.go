@@ -193,7 +193,7 @@ func (rp RizinPackage) downloadGit(artifactsPath string) error {
 			URL:               rp.PackageSource.URL,
 			RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 		})
-		if err == nil {
+		if err != nil {
 			return fmt.Errorf("failed to clone git repository from %s: %w", rp.PackageSource.URL, err)
 		}
 		return nil
@@ -220,7 +220,7 @@ func (rp RizinPackage) downloadGit(artifactsPath string) error {
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return fmt.Errorf("failed to pull git repository at %s: %w", projectPath, err)
 	}
-	
+
 	log.Printf("Git repository %s updated successfully.", projectPath)
 	return nil
 }
