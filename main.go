@@ -68,7 +68,7 @@ func listPackages(c *cli.Context, installed bool) error {
 		packages, err = site.ListAvailablePackages()
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list packages: %w", err)
 	}
 
 	green := color.New(color.Bold, color.FgGreen).SprintFunc()
@@ -146,17 +146,19 @@ func getNewRzPmVersion() (*version.Version, error) {
 	}
 	resp, err := client.Get("https://github.com/rizinorg/rz-pm/releases/latest")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query releases/latest URL: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 302 {
 		return nil, fmt.Errorf("expected a redirection when querying releases/latest URL")
 	}
+
 	redirect_url, err := resp.Location()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get redirect URL: %w", err)
 	}
+
 	redirect_url_parts := strings.Split(redirect_url.Path, "/")
 	new_version_str := redirect_url_parts[len(redirect_url_parts)-1]
 
@@ -176,21 +178,21 @@ func getRzPmName() string {
 	return name
 }
 
-func checkUpgrade(c *cli.Context) (bool, *version.Version, *version.Version, error) {
-	new_version, err := getNewRzPmVersion()
+func checkUpgrade(c *cli.Context) (needsUpgrade bool, current *version.Version, latest *version.Version, err error) {
+	latest, err = getNewRzPmVersion()
 	if err != nil {
-		return false, nil, nil, err
+		return false, nil, nil, fmt.Errorf("failed to get the latest rz-pm version: %w", err)
 	}
 
-	current_version, err := version.NewVersion(c.App.Version)
+	current, err = version.NewVersion(c.App.Version)
 	if err != nil {
-		return false, nil, nil, err
+		return false, nil, nil, fmt.Errorf("failed to parse current rz-pm version: %w", err)
 	}
 
-	if new_version.LessThanOrEqual(current_version) {
+	if latest.LessThanOrEqual(current) {
 		return false, nil, nil, nil
 	}
-	return true, current_version, new_version, nil
+	return true, current, latest, nil
 }
 
 func upgradeRzPm(c *cli.Context) error {
@@ -210,13 +212,14 @@ func upgradeRzPm(c *cli.Context) error {
 	rz_pm_name := getRzPmName()
 	resp, err := client.Get("https://github.com/rizinorg/rz-pm/releases/latest/download/" + rz_pm_name)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to download the new rz-pm version: %w", err)
 	}
+
 	defer resp.Body.Close()
 
 	err = update.Apply(resp.Body, update.Options{})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to apply the update: %w", err)
 	}
 	fmt.Printf("Upgrade to rz-pm version %s was successful!\n", new_version)
 	return nil
@@ -254,7 +257,7 @@ func installPackages(c *cli.Context) error {
 
 		err = site.InstallPackage(pkg)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to install package: %w", err)
 		}
 	}
 	return nil
@@ -289,7 +292,7 @@ func uninstallPackages(c *cli.Context) error {
 
 		err = site.UninstallPackage(pkg)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to uninstall package: %w", err)
 		}
 	}
 	return nil
@@ -320,7 +323,7 @@ func cleanPackage(c *cli.Context) error {
 
 	err = site.CleanPackage(pkg)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to clean package: %w", err)
 	}
 	fmt.Printf("Package %s build artifacts have been cleaned.\n", pkg.Name())
 	return nil
@@ -337,7 +340,7 @@ func checkNewerVersionOnline(c *cli.Context) error {
 		}
 
 		if shouldCheck {
-			log.Println("Checking for newer rz-pm version online...")
+			log.Println("Checking for latest rz-pm version online...")
 			needsUpgrade, current_version, new_version, err := checkUpgrade(c)
 			if err != nil {
 				return nil
