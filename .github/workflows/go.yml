@@ -80,7 +80,7 @@ jobs:
       - name: Check out source code
         uses: actions/checkout@v4
 
-      - name: Set up Golang ${{ env.GO_VERSION }}
+      - name: "Set up Golang ${{ env.GO_VERSION }}"
         uses: actions/setup-go@v5
         id: go
         with:
@@ -91,6 +91,9 @@ jobs:
 
       - name: Build the Go binary
         run: go build -v -o rz-pm .
+
+      - name: Clean rz-pm site directory
+        run: rm -rf ${{ env.RZ_PM_SITE }}
 
       - name: "Test: make sure jsdec is present in the database"
         run: ./rz-pm --debug list | grep -q 'Converts asm to pseudo-C code'
