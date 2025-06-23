@@ -9,6 +9,7 @@ env:
   GO_VERSION: "1.24"
   RIZIN_VERSION: "v0.8.1"
   PYTHON_VERSION: "3.13"
+  RZ_PM_SITE: "$HOME/.rizin/rz-pm"
 
 jobs:
   build:
@@ -65,14 +66,11 @@ jobs:
       - name: Configure and build Rizin
         if: steps.cache-rizin-build.outputs.cache-hit != 'true'
         run: |
-          cd rizin
-          meson setup --buildtype=release --prefix=${{ matrix.prefix }} ${{ matrix.meson_options }} build
-          ninja ${{ matrix.os == 'windows-latest' && '-j1' || '' }} -C build
+          meson setup --buildtype=release --prefix=${{ matrix.prefix }} ${{ matrix.meson_options }} rizin/build rizin
+          ninja ${{ matrix.os == 'windows-latest' && '-j1' || '' }} -C rizin/build
 
       - name: Install rizin
-        run: |
-          cd rizin/build
-          ${{ matrix.sudo }} ninja install
+        run: ${{ matrix.sudo }} ninja -C rizin/build install
 
       - name: Add rizin dir to PATH
         if: matrix.os == 'windows-latest'
@@ -81,19 +79,24 @@ jobs:
 
       - name: Check out source code
         uses: actions/checkout@v4
+
       - name: Set up Golang ${{ env.GO_VERSION }}
         uses: actions/setup-go@v5
+        id: go
         with:
           go-version: ${{ env.GO_VERSION }}
-        id: go
+
       - name: Run unit tests
         run: go test -v ./... -race -coverprofile=coverage.txt -covermode=atomic
+
       - name: Build the Go binary
         run: go build -v -o rz-pm .
 
       - name: "Test: make sure jsdec is present in the database"
         run: ./rz-pm --debug list | grep -q 'Converts asm to pseudo-C code'
+
       - name: "Test: Install jsdec"
         run: ./rz-pm --debug install jsdec
+
       - name: "Test: Check jsdec"
         run: ls $(rizin -H RZ_USER_PLUGINS) | grep core_pdd
