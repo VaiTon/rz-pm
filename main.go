@@ -336,25 +336,25 @@ func checkNewerVersionOnline(c *cli.Context) error {
 		shouldCheck, err := updateChecker.ShouldCheck()
 		if err != nil {
 			// If we can't determine, default to checking
+			log.Printf("Error checking if update is needed: %v\n", err)
 			shouldCheck = true
 		}
 
 		if shouldCheck {
 			log.Println("Checking for latest rz-pm version online...")
+
 			needsUpgrade, current_version, new_version, err := checkUpgrade(c)
 			if err != nil {
-				return nil
-			} else if !needsUpgrade {
-				_ = updateChecker.UpdateTimestamp()
-				return nil
+				return fmt.Errorf("failed to check for newer rz-pm version: %w", err)
 			}
 
-			fmt.Println("Your version of rz-pm is not the latest one.")
-			fmt.Printf("Currently installed version: %s, available version: %s\n", current_version, new_version)
-			fmt.Println()
-			fmt.Println("Run the 'upgrade' command to upgrade rz-pm.")
+			if needsUpgrade {
+				fmt.Println("Your version of rz-pm is not the latest one.")
+				fmt.Printf("Currently installed version: %s, available version: %s\n", current_version, new_version)
+				fmt.Println()
+				fmt.Println("Run the 'upgrade' command to upgrade rz-pm.")
+			}
 			_ = updateChecker.UpdateTimestamp()
-			os.Exit(0)
 		} else {
 			log.Println("Skipping update check, last check was recent enough.")
 		}
@@ -362,12 +362,13 @@ func checkNewerVersionOnline(c *cli.Context) error {
 
 	shouldUpdateDB, err := dbUpdateChecker.ShouldCheck()
 	if err != nil {
+		log.Printf("Error checking if DB update is needed: %v\n", err)
 		// If we can't determine, default to checking
 		shouldUpdateDB = true
 	}
 
 	if shouldUpdateDB {
-		log.Println("We didn't check the DB for updates for a while, checking now...")
+		log.Println("This is the first run or the last DB update check was too long ago, checking for updates...")
 		c.Set(flagUpdateDB, "true")
 		dbUpdateChecker.UpdateTimestamp()
 	} else {

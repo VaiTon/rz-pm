@@ -29,7 +29,7 @@ func InitDatabase(path string, rizinVersion string) (Database, error) {
 	// if path does not exist, create it and force a db update
 	_, err := os.Stat(path)
 	if err != nil {
-
+		firstTime = true
 		if !os.IsNotExist(err) {
 			return Database{}, fmt.Errorf("failed to access database directory: %w", err)
 		}
@@ -38,7 +38,8 @@ func InitDatabase(path string, rizinVersion string) (Database, error) {
 		if err != nil {
 			return Database{}, fmt.Errorf("failed to create database directory: %w", err)
 		}
-		firstTime = true
+
+		log.Printf("Database directory %s created.\n", path)
 	}
 
 	d := Database{path}
