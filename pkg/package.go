@@ -313,7 +313,7 @@ func (rp RizinPackage) installMeson(site Site) ([]string, error) {
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()
 	if err := cmd.Run(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("meson install failed: %w", err)
 	}
 
 	cmd = exec.Command("meson", "introspect", "--installed", "build")
@@ -347,7 +347,7 @@ func (rp RizinPackage) installCMake(site Site) ([]string, error) {
 
 	log.Printf("Running cmake install...")
 	if err := cmd.Run(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cmake install failed: %w", err)
 	}
 
 	file, err := os.Open(filepath.Join(srcPath, "build", "install_manifest.txt"))
@@ -440,22 +440,26 @@ func (rp RizinPackage) Build(site Site) error {
 func (rp RizinPackage) Install(site Site) ([]string, error) {
 	err := rp.Build(site)
 	if err != nil {
-		return []string{}, err
+		return []string{}, fmt.Errorf("failed to build package %s: %w", rp.PackageName, err)
 	}
 
 	var installed_files []string
 	fmt.Printf("Installing %s...\n", rp.PackageName)
-	if rp.PackageSource.BuildSystem == "meson" {
+
+	switch rp.PackageSource.BuildSystem {
+	case "meson":
 		installed_files, err = rp.installMeson(site)
-	} else if rp.PackageSource.BuildSystem == "cmake" {
+	case "cmake":
 		installed_files, err = rp.installCMake(site)
-	} else {
+	default:
 		log.Printf("BuildSystem %s is not supported yet.", rp.PackageSource.BuildSystem)
 		err = fmt.Errorf("unsupported build system")
 	}
+
 	if err != nil {
-		return []string{}, err
+		return []string{}, fmt.Errorf("failed to install package %s: %w", rp.PackageName, err)
 	}
+
 	fmt.Printf("Package %s built and installed.\n", rp.PackageName)
 	return installed_files, nil
 }

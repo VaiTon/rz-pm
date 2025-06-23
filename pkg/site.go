@@ -119,7 +119,7 @@ func InitSite(path string, updateDB bool) (Site, error) {
 
 	cleanup := func(err error) (*RizinSite, error) {
 		_ = siteLock.Unlock()
-		return &RizinSite{}, err
+		return &RizinSite{}, fmt.Errorf("failed to initialize site: %w", err)
 	}
 
 	rizinInfo, err := rizin.GetRizinInfo()
@@ -186,7 +186,7 @@ func (rp InstalledPackage) Uninstall(site Site) error { return fmt.Errorf("canno
 func (s *RizinSite) ListAvailablePackages() ([]Package, error) {
 	res, err := s.Database.ListAvailablePackages()
 	if err != nil {
-		return []Package{}, err
+		return []Package{}, fmt.Errorf("failed to list available packages: %w", err)
 	}
 
 	for i := range s.installedPackages {
@@ -337,7 +337,7 @@ func getPkgConfigPath(info *rizin.RizinInfo) (string, error) {
 	if os.IsNotExist(err) {
 		return "", nil
 	} else if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to stat pkg-config path %s: %w", pkgConfigPath, err)
 	}
 	return pkgConfigPath, nil
 }
@@ -350,7 +350,7 @@ func getCMakePath(info *rizin.RizinInfo) (string, error) {
 	if os.IsNotExist(err) {
 		return "", nil
 	} else if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to stat CMake path %s: %w", cmakePath, err)
 	}
 	return cmakePath, nil
 }
@@ -363,7 +363,7 @@ func getInstalledPackages(path string, rizinVersion string) ([]InstalledPackage,
 
 	by, err := os.ReadFile(path)
 	if err != nil {
-		return []InstalledPackage{}, err
+		return []InstalledPackage{}, fmt.Errorf("failed to read installed packages file %s: %w", path, err)
 	}
 
 	var v []InstalledPackage
@@ -372,7 +372,7 @@ func getInstalledPackages(path string, rizinVersion string) ([]InstalledPackage,
 		var vs []string
 		err = json.Unmarshal(by, &vs)
 		if err != nil {
-			return []InstalledPackage{}, err
+			return []InstalledPackage{}, fmt.Errorf("failed to parse installed packages file %s: %w", path, err)
 		}
 
 		v = []InstalledPackage{}

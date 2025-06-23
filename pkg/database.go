@@ -72,7 +72,7 @@ func remoteBranches(s storer.ReferenceStorer) (storer.ReferenceIter, error) {
 func (d Database) switchTag(repo *git.Repository, w *git.Worktree, rizinVersion string) (string, error) {
 	branches, err := remoteBranches(repo.Storer)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get remote branches: %w", err)
 	}
 
 	versionPieces := strings.SplitN(rizinVersion, ".", 3)
@@ -109,7 +109,7 @@ func (d Database) switchTag(repo *git.Repository, w *git.Worktree, rizinVersion 
 		ref := plumbing.NewHashReference(localBranchName, switchHash)
 		err = repo.Storer.SetReference(ref)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to create local branch %s: %w", localBranchName, err)
 		}
 		create = true
 	}
@@ -178,13 +178,13 @@ func (d Database) UpdateDatabase(rizinVersion string) error {
 func ParsePackageFile(path string) (Package, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return RizinPackage{}, err
+		return RizinPackage{}, fmt.Errorf("failed to read package file %s: %w", path, err)
 	}
 
 	var p RizinPackage
 	err = yaml.Unmarshal(content, &p)
 	if err != nil {
-		return RizinPackage{}, err
+		return RizinPackage{}, fmt.Errorf("failed to parse package file %s: %w", path, err)
 	}
 
 	if p.PackageName == "" || p.PackageVersion == "" || p.PackageSummary == "" {
